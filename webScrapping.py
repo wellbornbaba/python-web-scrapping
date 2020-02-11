@@ -27,7 +27,6 @@ class SiteGrawbler():
 		self.ignorelist = ['.html', '.htm', '.html5',
 		    '.php', '.py', '.java', '.blade', '.aspx']
 		self.downloadfiles = ['.pdf', '.exe', '.docx', '.doc', '.csv']
-		self.pausetime = 60
 		self.grapdofollow = True
 		self.totalnumber_of_url = 0
 		self.grabproxylist = ''
