@@ -6,7 +6,6 @@ import queue
 import logging
 import tkinter as tk
 from tkinter import N, S, E, W
-from urllib.parse import urlparse
 import sqlite3
 from bs4 import BeautifulSoup as bs
 import tldextract
@@ -166,6 +165,14 @@ def cleantitle(words):
     return r.replace('_', '-')
 
 
+def clean_url_path(url):
+    '''
+    Remove all bad characters to only accept this characters A-Za-z0-9-._
+    '''
+    r = sub('[^A-Za-z0-9-_/.]+', '', url)
+    return r.replace('_', '-')
+
+
 def hidebutton(widget):
     widget.place(x=150, y=100)
     widget.place_forget()
@@ -300,10 +307,17 @@ def remove_duplicatelist(x):
 def normalpath(path):
     return os.path.normpath(path).replace("\\", "/")
 
+def local_normalpath(path):
+    if is_url(path):
+        path = new_urlpath(path)
+        
+    return os.path.normpath(path)
 
 def joinpath(part1, part2):
     return normalpath(os.path.join(part1, part2))
 
+def joinpath_raw(part1, part2):
+    return os.path.join(part1, part2)
 
 def remove_firstpath_dir(dirs):
     t = normalpath(dirs)
@@ -321,14 +335,20 @@ def log(key, logpath, name):
 
 def urlfolder(url):
 	#firstly check if url has extension
-	ext = exts(url)
-	if not ext:
-		#remove any leading / since we will add another / below
-		url = url.rstrip('/')
-		url = url + '/'
+    #clean files pls
+    if '#' in url:
+        url = url.split('#')[0]
+    if '?' in url:
+        url = url.split('?')[0]
+        
+    ext = exts(url)
+    if not ext:
+        #remove any leading / since we will add another / below
+        url = url.rstrip('/')
+        url = url + '/'
 
-	isparsed = urlparse(url).path.lstrip('/')
-	return normalpath(os.path.dirname(isparsed)).replace('.','')
+    isparsed = urlparse(url).path.lstrip('/')
+    return normalpath(os.path.dirname(isparsed)).replace('.','')
 
 
 def getfolder(url, domain):
@@ -351,12 +371,15 @@ def getdomain_only(url):
 
 
 def new_urlpath(url):
-    a_href_path = urlfolder(url)
+    a_href_new_path = urlfolder(url)
     # a_href_ext = os.path.splitext(a_href)[1]
     # we get the basename of the actual linked url
-    a_href_basename = os.path.basename(url)
-    # here we get new created url path
-    a_href_new_path = joinpath(a_href_path, a_href_basename)
+    check_extn = exts(url)
+    if check_extn:
+        a_href_basename = os.path.basename(url)
+        # here we get new created url path
+        a_href_new_path = joinpath(a_href_new_path, a_href_basename)
+        
     return a_href_new_path
 
 
@@ -413,6 +436,8 @@ def makefolder(dirpath):
         except Exception:
             pass
 
+def file_exists(path):
+    return os.path.exists(path)
 
 def firstfolder(dirpath):
     return normalpath(os.path.dirname(dirpath))
@@ -663,8 +688,8 @@ def downloadremote(fromfile, tofile):
             return True
         else:
             return r.status_code
-    except Exception as e:
-        return 'Downloading accessing error: ' + str(e)
+    except Exception:
+        return False
 
 
 def browseurl(url):
