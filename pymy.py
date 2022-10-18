@@ -525,18 +525,27 @@ def localwrite_file(dfile, txt):
 
 
 def remoteread_file(dfile, proxy=''):
+    result = {'body': '', 'code':'', 'charset': '', 'status': False}
     try:
         with requests.get(dfile, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; rv:70.0) Gecko/20100101 Firefox/70.0'},
                           verify=False, stream=True, proxies={"http": proxy, "https": proxy}) as response:
-            allowcode = [200, 202, 201, 203, 206, 302, 301, 303, 305, 307, 404]
+            allowcode = [200, 202, 201, 203, 206, 302, 301, 303, 305, 307]
+            
             if response.status_code in allowcode:
                 # now proceed with the grabbing
-                return response.content.decode('utf-8')
+                # return response.content.decode('utf-8')
+                result['body'] = response.content.decode(response.encoding)
+                result['code'] = response.status_code
+                result['charset'] = response.encoding
+                result['status'] = True
             else:
-                return response.status_code
+                result['code'] = response.status_code
+                result['status'] = False
     except Exception as e:
-        print('Requests '+ str(e))
-        return False
+        result['body'] = str(e)
+        result['status'] = False
+        
+    return result
 
 
 def getproxy():
@@ -642,6 +651,36 @@ def basename(url):
     return os.path.basename(url.rstrip('/'))
 
 
+def parse_url_short_link(base_url, short_url ):
+    if is_url(short_url) or short_url.startswith('data:image'): 
+        return short_url
+    
+    base_url_paths = urlparse(base_url)
+    base_domain = f'{base_url_paths.scheme}://{base_url_paths.netloc}/'
+    folder_path = urlfolder(base_url)
+    # let count how many / slashes in the folder path
+    if '../' in short_url:
+        all_slashes = len([s for s in short_url.split('../')]) - 1
+        folder_path = "/".join(list(folder_path.split('/')[0:- all_slashes])) 
+        
+        if folder_path:
+            folder_path = folder_path + '/'
+        else:
+            folder_path = ''
+            
+        short_url = short_url.replace('../', '')
+        
+    elif short_url.startswith('./') or short_url.startswith('/'):
+        folder_path =''
+        short_url = short_url.lstrip('./').lstrip('/') 
+    
+    else:
+        folder_path = folder_path+ '/'
+    
+    result = base_domain + folder_path + short_url 
+    
+    return result
+    
 def exts(url):
     '''
     Get the base name of a given url

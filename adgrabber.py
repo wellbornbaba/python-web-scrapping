@@ -125,7 +125,7 @@ class SiteGrawbler():
         link_extension =  exts(url)
         # new formate to save found file
         new_save_item = self.prepare_link(url)
-        
+        return new_save_item
         # sometimes we dont get extension from SEO webpages so we assume its a webpage 
         if not link_extension:
             if self.check_if_domain_starts_with(url):
@@ -168,13 +168,13 @@ class SiteGrawbler():
             return new_save_item
         
         
-    def save_locally(self, dcontent, dpath, saveto_url):
+    def save_locally(self, dcontent, dpath, saveto_url, charset='utf-8'):
         #firstly get folder then create it
         if dpath:
             makefolder(dpath)
             
         try:
-            with open(saveto_url, 'w', encoding='utf-8') as fp:
+            with open(saveto_url, 'w', encoding=charset) as fp:
                 fp.write(dcontent)
                 
             return True
@@ -190,69 +190,33 @@ class SiteGrawbler():
                 return False
         
         
-    def parse_url(self, base_url, short_url ):
-        if is_url(short_url): 
-            return short_url
-        
-        base_url_paths = urlparse(base_url)
-        base_domain = f'{base_url_paths.scheme}://{base_url_paths.netloc}/'
-        folder_path = urlfolder(base_url)
-        # let count how many / slashes in the folder path
-        if '/' in folder_path:
-            all_slashes = len([s for s in folder_path.split('/')]) - 1
-            print(all_slashes)
-        print(base_url_paths)
-        result = ''
-        
-        if short_url.startswith('./') or short_url.startswith('/'):
-            result = base_domain + short_url.lstrip('.').lstrip('/')
-        
-        if short_url.startswith('../'):
-            if '/' in folder_path:
-                all_slashes = len([s for s in folder_path.split('/')]) - 1
-            result = base_domain + short_url.lstrip('..')
-        
-        return result
-    
-        
     def parce_css_file(self, link):
         check_path = self.prepare_link(link)
         
         if not file_exists(check_path['locallink']) or self.force_overwrite:
-            dcontent = self.get_html_content(link)
+            dcontent_result = self.get_html_content(link)
+            dcontent = dcontent_result['body']
+            dcontent_charset = dcontent_result['charset']
+            
             dcontent = bs(dcontent, 'html.parser')
-            url = link.rstrip('/') #remove ending tralling /
             #get all background embeded in style url
             soupbackground_image = self.parse_background_url_image_links(dcontent)
             print(soupbackground_image)
             
             if len(soupbackground_image): 
-                # get extension
-                link_extension =  exts(link)
-                
-                try:
+                for found_link in soupbackground_image:
+                    oldurl = found_link.replace('"', '').replace( "'", '')
                     
-                    for found_link in soupbackground_image:
-                        oldurl = found_link.replace('"', '').replace( "'", '').replace('..', '')
-                        
-                        checkoldbase = oldurl[0]
-                        if checkoldbase == '/':
-                            downloadableurl = url + oldurl
-                        else:
-                            downloadableurl = url + '/' + oldurl
-                        
-                        print(downloadableurl)
-                        # self.set_file_mimeType(downloadableurl)
+                    downloadableurl = parse_url_short_link(link, oldurl)
+                    
+                    print(downloadableurl)
+                    self.set_file_mimeType(downloadableurl)
 
-                except Exception as e:
-                    print('BACKGROUNDURL Error ', e)
-                    pass
-                
-                # result = self.save_locally(dcontent, check_path['localpath'], check_path['locallink'])
-                # if result:
-                #     print(f'{check_path["name"]} is saved to [{check_path["localpath"]}]')
-                # else:
-                #     print(f'{check_path["name"]} failed to saved to [{check_path["localpath"]}]')
+            result = self.save_locally(dcontent, check_path['localpath'], check_path['locallink'], dcontent_charset)
+            if result:
+                print(f'{check_path["name"]} is saved to [{check_path["localpath"]}]')
+            else:
+                print(f'{check_path["name"]} failed to saved to [{check_path["localpath"]}]')
         
         
 
@@ -263,10 +227,11 @@ class SiteGrawbler():
         check_path = self.prepare_link(url)
         
         if not file_exists(check_path['locallink']) or self.force_overwrite:
-            dcontent = self.get_html_content(url)
-            dcontent = bs(dcontent, 'html.parser')
+            dcontent_result = self.get_html_content(url)
+            dcontent = dcontent_result['body']
+            dcontent_charset = dcontent_result['charset']
             
-            result = []
+            dcontent = bs(dcontent, 'html.parser')
 
             # if is decleared we only extract attribute with the value provided not parsing all body of the page
             if self.extract_from_div_name:
@@ -288,33 +253,26 @@ class SiteGrawbler():
 
             #get all background embeded in style url
             soupbackground_image = self.parse_background_url_image_links(dcontent)
-            
+        
             if len(soupbackground_image): 
-                try:
+                for found_link in soupbackground_image:
+                    try:
+                        oldurl = found_link.replace('"', '').replace( "'", '')
                     
-                    for found_link in soupbackground_image:
-                        oldurl = found_link.replace('"', '').replace( "'", '').replace('..', '')
-                        
-                        checkoldbase = oldurl[0]
-                        if checkoldbase == '/':
-                            downloadableurl = url + oldurl
-                        else:
-                            downloadableurl = url + '/' + oldurl
-
+                        downloadableurl = parse_url_short_link(url, oldurl)
                         processed_result = self.set_file_mimeType(downloadableurl)
-                        dcontent = dcontent.replace(found_link, processed_result['path'])
-
-                except Exception as e:
-                    print('BACKGROUNDURL Error ', e)
-                    pass
-
+                        dcontent = dcontent.replace(found_link, processed_result['linkpath'])
+          
+                    except Exception:
+                        pass
+                    
+                    
             #get all url a tags
             try:
                 for a_stag in dcontent.find_all('a'):
                     #save for the next parsing must be full url
                     href_link = cleanurl(url, a_stag["href"])
                     self.set_file_mimeType(href_link)
-                    result.append(href_link)
 
             except Exception as e:
                 print('HREF Error ', e)
@@ -326,7 +284,6 @@ class SiteGrawbler():
                     #save for the next parsing must be full url
                     href_link = cleanurl(url, a_stag["href"])
                     self.set_file_mimeType(href_link)
-                    result.append(href_link)
 
             except Exception as e:
                 print('LINK Error ', e)
@@ -336,10 +293,8 @@ class SiteGrawbler():
             try:
                 for a_stag in dcontent.find_all('script'):
                     #save for the next parsing must be full url
-                    
                     href_link = cleanurl(url, a_stag["src"])
                     self.set_file_mimeType(href_link)
-                    result.append(href_link)
 
             except Exception as e:
                 print('SCRIPT Error ', e)
@@ -351,13 +306,16 @@ class SiteGrawbler():
                     #save for the next parsing must be full url
                     href_link = cleanurl(url, a_stag["src"])
                     self.set_file_mimeType(href_link)
-                    result.append(href_link)
 
             except Exception as e:
                 print('IMG Error ', e)
                 pass
-
-        # return result
+            
+            result = self.save_locally(dcontent, check_path['localpath'], check_path['locallink'], dcontent_charset)
+            if result:
+                print(f'{check_path["name"]} is saved to [{check_path["localpath"]}]')
+            else:
+                print(f'{check_path["name"]} failed to saved to [{check_path["localpath"]}]')
         
     
     def parse_background_url_image_links(self, dcontent):
@@ -376,11 +334,11 @@ class SiteGrawbler():
     
 
 if __name__ == "__main__":
-    do = SiteGrawbler('http://wehostz.com/') #
-    # print(do.get_all_links())
-    # print(do.parse_url('https://wehostz.com/css/images/style.css', '../images/pre_bg.gif'))
+    do = SiteGrawbler('https://www.globalgiving.org/') #
+    print(do.get_all_links())
+    # print(do.parce_css_file('https://www.globalgiving.org/v2/css/minimal.css'))
     # let get the url variables 
     # https://wehostz.com/css/style.css
     # new_filename = cleantitle(basename(file))
-    print(firstpath_name(('http://wehostz.com/images/exchange-ecurrency.css', 1)))
+    # print(firstpath_name(('http://wehostz.com/images/exchange-ecurrency.css', 1)))
     # {'name': 'fresh-leads.html', 'remotelink': 'http://wehostz.com/fresh-leads', 'linkpath': 'fresh-leads.html', 'locallink': 'fresh-leads.html', 'localpath': 'C:\\Users\\Blessed\\Downloads\\wehostz.com\\fresh-leads', 'type': 'link'}
