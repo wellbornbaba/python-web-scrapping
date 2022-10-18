@@ -551,7 +551,7 @@ def remoteread_file(dfile, proxy=''):
 def getproxy():
     #https://free-proxy-list.net/
     # check http://httpbin.org/ip
-    proxycontent = remoteread_file('https://free-proxy-list.net/')
+    proxycontent = remoteread_file('https://free-proxy-list.net/')['body']
     proxycontent = bs(proxycontent, 'html.parser')
     proxycontent = proxycontent.find('table', class_='table-striped')
     rows = []
